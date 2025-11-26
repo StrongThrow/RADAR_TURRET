@@ -17,11 +17,11 @@ STM32(FreeRTOS) 기반의 정밀 제어 유닛들과 라즈베리파이 중앙 �
 
 ## 📺 Demo Preview
 
-| Radar Scanning (Web View) | Turret Tracking & Firing |
+| 터렛 조준&발사 | 레이더 화면(html) | 레이더 화면(Arduino) |
 | :---: | :---: |
-| <img src="./assets/radar_web_demo.gif" width="400" alt="Web Dashboard Demo"> | <img src="./assets/turret_demo.gif" width="400" alt="Turret Operation Demo"> |
+| ![Image](https://github.com/user-attachments/assets/393b3e99-5a18-4e8b-b7c1-445879e7610f) | ![Image](https://github.com/user-attachments/assets/e7ef86b6-0220-431d-b735-026adae5fda5) | ![Image](https://github.com/user-attachments/assets/05c24a5e-2489-456e-91a9-154d38dabbfa) |
 
-*실시간 웹 레이더 화면(좌)과 실제 터렛 작동 모습(우)*
+*터렛 조중 화면(좌), 레이더 화면(html)(중), 레이더 화면(OLED) (우)*
 
 ---
 
