@@ -21,9 +21,7 @@ STM32(FreeRTOS) 기반의 정밀 제어 유닛들과 라즈베리파이 중앙 �
 | :---: | :---: | :---: |
 | <img src="https://github.com/user-attachments/assets/393b3e99-5a18-4e8b-b7c1-445879e7610f" width="250"> | <img src="https://github.com/user-attachments/assets/e7ef86b6-0220-431d-b735-026adae5fda5" width="250"> | <img src="https://github.com/user-attachments/assets/05c24a5e-2489-456e-91a9-154d38dabbfa" width="250"> |
 
-*터렛 조준 화면(좌), 웹 레이더(중), OLED 레이더(우)*
-
-*터렛 조중 화면(좌), 레이더 화면(html)(중), 레이더 화면(OLED) (우)*
+*OLED 레이더(좌), 터렛 조준 화면(중), 웹 레이더(우)*
 
 ---
 
