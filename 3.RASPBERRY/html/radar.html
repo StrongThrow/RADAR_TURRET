@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <title>Radar View</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    html, body { margin:0; background:#0b0d10; color:#cfd8dc; font-family:system-ui, sans-serif; }
+    .wrap { max-width:820px; margin:24px auto; padding:0 16px; }
+    h1 { font-size:20px; margin:0 0 12px; }
+    .panel { background:#12161a; border:1px solid #1f2429; border-radius:12px; padding:16px; }
+    #status { font-size:12px; opacity:0.8; margin-top:8px; }
+    canvas { width:100%; height:auto; display:block; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Radar (last 3s blips)</h1>
+    <div class="panel">
+      <!-- 실제 캔버스 해상도는 800x420로 잡고, CSS로 반응형 축소 -->
+      <canvas id="radarCanvas" width="800" height="420"></canvas>
+      <div id="status">waiting…</div>
+    </div>
+  </div>
+
+  <script>
+    // ===== 기본 설정 =====
+    const API_URL       = '/api/radar_current.php';
+    const MAX_RANGE_CM  = 200;     // STM 측정 최대 거리 (cm)
+    const BLIP_MS       = 3000;    // 점 유지시간 3초
+    const POLL_MS       = 300;     // 폴링 주기
+    const GRID_STEP_CM  = 50;      // 그리드 원 간격(50cm)
+    const RADIAL_STEP   = 30;      // 방위선 간격(도)
+    const SWEEP_SPEED   = 0.8;     // 스윕 속도(도/프레임, 단순 연출)
+
+    const canvas = document.getElementById('radarCanvas');
+    const ctx    = canvas.getContext('2d');
+    const W      = canvas.width;
+    const H      = canvas.height;
+
+    // 반원 배치: 바닥 중앙이 원의 중심
+    const margin = 16;
+    const R      = Math.min(W/2 - margin, H - margin*2); // 반지름
+    const CX     = W / 2;
+    const CY     = H - margin;
+
+    // 상태
+    let blips = [];  // {x,y,createdMs}
+    let lastPayloadKey = null; // 마지막으로 반영한 좌표 식별(ts+x+y)
+    let sweepAngle = 0; // 단순 스윕 연출용 (0~180)
+
+    const $status = document.getElementById('status');
+
+    // 좌표(cm) -> 캔버스(px) 변환
+    function toScreenXY(xcm, ycm) {
+      const scale = R / MAX_RANGE_CM;
+      const sx = CX + xcm * scale;      // x는 오른쪽이 +
+      const sy = CY - ycm * scale;      // y는 위쪽이 +
+      return { x: sx, y: sy };
+    }
+
+    // 반원/그리드 그리기
+    function drawGrid() {
+      ctx.clearRect(0, 0, W, H);
+
+      // 배경
+      ctx.fillStyle = '#0b0d10';
+      ctx.fillRect(0, 0, W, H);
+
+      // 반원 테두리
+      ctx.beginPath();
+      ctx.arc(CX, CY, R, Math.PI, 0, false);
+      ctx.strokeStyle = '#2b3238';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // 그리드 원 (50/100/150/200 cm)
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = '#1d242a';
+      for (let r = GRID_STEP_CM; r <= MAX_RANGE_CM; r += GRID_STEP_CM) {
+        const rr = R * (r / MAX_RANGE_CM);
+        ctx.beginPath();
+        ctx.arc(CX, CY, rr, Math.PI, 0, false);
+        ctx.stroke();
+      }
+
+      // 방위선 (0~180도)
+      ctx.strokeStyle = '#1d242a';
+      for (let ang = 0; ang <= 180; ang += RADIAL_STEP) {
+        const rad = ang * Math.PI / 180;
+        const x2  = CX + R * Math.cos(rad);
+        const y2  = CY - R * Math.sin(rad);
+        ctx.beginPath();
+        ctx.moveTo(CX, CY);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
+
+      // 눈금 라벨 (거리)
+      ctx.fillStyle = '#6b7a86';
+      ctx.font = '12px system-ui, sans-serif';
+      for (let r = GRID_STEP_CM; r <= MAX_RANGE_CM; r += GRID_STEP_CM) {
+        const rr = R * (r / MAX_RANGE_CM);
+        ctx.fillText(`${r}cm`, CX + 6, CY - rr - 4);
+      }
+    }
+
+    // 스윕 라인(연출)
+    function drawSweep() {
+      const rad = sweepAngle * Math.PI / 180;
+      const x2  = CX + R * Math.cos(rad);
+      const y2  = CY - R * Math.sin(rad);
+      const grd = ctx.createLinearGradient(CX, CY, x2, y2);
+      grd.addColorStop(0.0, 'rgba(0,255,128,0.18)');
+      grd.addColorStop(1.0, 'rgba(0,255,128,0.00)');
+
+      ctx.strokeStyle = grd;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(CX, CY);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+
+      sweepAngle += SWEEP_SPEED;
+      if (sweepAngle > 180) sweepAngle = 0;
+    }
+
+    // 블립(점) 그리기: 3초 동안 점점 사라지게
+    function drawBlips(now) {
+      const next = [];
+      for (const b of blips) {
+        const age = now - b.createdMs;
+        if (age < BLIP_MS) {
+          const alpha = 1 - age / BLIP_MS;
+          ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+          ctx.fillStyle   = '#00ff80';
+          ctx.strokeStyle = '#00ff80';
+
+          // 점
+          ctx.beginPath();
+          ctx.arc(b.sx, b.sy, 5, 0, Math.PI * 2);
+          ctx.fill();
+
+          // 잔광(약한 원)
+          ctx.globalAlpha = alpha * 0.3;
+          ctx.beginPath();
+          ctx.arc(b.sx, b.sy, 12, 0, Math.PI * 2);
+          ctx.stroke();
+
+          next.push(b);
+        }
+      }
+      ctx.globalAlpha = 1;
+      blips = next;
+    }
+
+    // 메인 렌더 루프
+    function tick() {
+      const now = performance.now();
+      drawGrid();
+      drawSweep();
+      drawBlips(now);
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+
+    // 새 좌표 수신 시 블립 추가
+    function addBlip(xcm, ycm) {
+      // 반원 범위 체크 (y>=0, x^2 + y^2 <= MAX^2)
+      if (ycm < 0) return;
+      if ((xcm*xcm + ycm*ycm) > (MAX_RANGE_CM*MAX_RANGE_CM)) return;
+
+      const { x: sx, y: sy } = toScreenXY(xcm, ycm);
+      blips.push({ sx, sy, createdMs: performance.now() });
+    }
+
+    // 폴링 루틴: 좌표 변경 시에만 blip 추가
+    async function poll() {
+      try {
+        const res = await fetch(API_URL, { cache: 'no-store' });
+        const j   = await res.json();
+
+        if (j && j.ok) {
+          $status.textContent = `x=${j.x.toFixed(2)} cm, y=${j.y.toFixed(2)} cm @ ${j.ts}`;
+          const key = `${j.ts}|${j.x}|${j.y}`;
+          if (lastPayloadKey !== key) {
+            lastPayloadKey = key;
+            addBlip(j.x, j.y);
+          }
+        } else {
+          $status.textContent = 'no data';
+        }
+      } catch (e) {
+        $status.textContent = 'fetch error';
+      } finally {
+        setTimeout(poll, POLL_MS);
+      }
+    }
+    poll();
+  </script>
+</body>
+</html>
