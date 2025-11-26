@@ -17,7 +17,7 @@ STM32(FreeRTOS) 기반의 정밀 제어 유닛들과 라즈베리파이 중앙 �
 
 ## 📺 Demo Preview
 
-| 터렛 조준 & 발사 | 레이더 화면 (Web) | 레이더 화면 (Arduino) |
+| 레이더 화면 (Arduino) | 터렛 조준 & 발사 | 레이더 화면 (Web) |
 | :---: | :---: | :---: |
 | <img src="https://github.com/user-attachments/assets/393b3e99-5a18-4e8b-b7c1-445879e7610f" width="250"> | <img src="https://github.com/user-attachments/assets/e7ef86b6-0220-431d-b735-026adae5fda5" width="250"> | <img src="https://github.com/user-attachments/assets/05c24a5e-2489-456e-91a9-154d38dabbfa" width="250"> |
 
